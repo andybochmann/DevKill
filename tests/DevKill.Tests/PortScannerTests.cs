@@ -232,6 +232,16 @@ public class PortScannerTests
     // --- IPv6 integration ---
 
     [Fact]
+    public void Scan_UdpEntries_AreOnlyDevProcesses()
+    {
+        var result = new PortScanner().Scan();
+        foreach (var entry in result.Where(e => e.Protocol == "UDP"))
+        {
+            Assert.True(entry.IsDevProcess, $"Non-dev UDP entry found: {entry.ProcessName}:{entry.Port}");
+        }
+    }
+
+    [Fact]
     public void Scan_AllAddressesAreValidIpAddresses()
     {
         var result = new PortScanner().Scan();

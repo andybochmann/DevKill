@@ -100,8 +100,12 @@ public class PortScanner : IPortScanner
                 rowPtr += rowSize;
 
                 int port = NetworkToHostPort(row.dwLocalPort);
-                var addr = new IPAddress(row.dwLocalAddr).ToString();
                 var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+
+                if (!IsDevProcessName(procName))
+                    continue;
+
+                var addr = new IPAddress(row.dwLocalAddr).ToString();
 
                 entries.Add(new PortEntry
                 {
@@ -112,7 +116,7 @@ public class PortScanner : IPortScanner
                     Protocol = "UDP",
                     LocalAddress = addr,
                     State = "",
-                    IsDevProcess = IsDevProcessName(procName),
+                    IsDevProcess = true,
                 });
             }
         }
@@ -198,11 +202,15 @@ public class PortScanner : IPortScanner
                 rowPtr += rowSize;
 
                 int port = NetworkToHostPort(row.dwLocalPort);
+                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+
+                if (!IsDevProcessName(procName))
+                    continue;
+
                 var addrBytes = new byte[16];
                 for (int j = 0; j < 16; j++)
                     addrBytes[j] = row.ucLocalAddr[j];
                 var addr = new IPAddress(addrBytes).ToString();
-                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
 
                 entries.Add(new PortEntry
                 {
@@ -213,7 +221,7 @@ public class PortScanner : IPortScanner
                     Protocol = "UDP",
                     LocalAddress = addr,
                     State = "",
-                    IsDevProcess = IsDevProcessName(procName),
+                    IsDevProcess = true,
                 });
             }
         }
