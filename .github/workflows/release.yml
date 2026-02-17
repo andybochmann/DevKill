@@ -36,7 +36,7 @@ jobs:
           --output ./publish
 
       - name: Rename artifact
-        run: Move-Item ./publish/DevKill.exe ./devkill.exe
+        run: Move-Item ./publish/devkill.exe ./devkill.exe
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
