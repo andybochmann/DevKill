@@ -93,6 +93,7 @@
                   BorderThickness="0"
                   HorizontalScrollBarVisibility="Disabled"
                   SizeChanged="PortGrid_SizeChanged"
+                  LoadingRow="PortGrid_LoadingRow"
                   Margin="16,0,16,0">
 
             <DataGrid.GroupStyle>

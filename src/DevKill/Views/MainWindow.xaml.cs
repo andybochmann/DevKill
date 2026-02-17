@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -115,6 +116,97 @@ public partial class MainWindow : FluentWindow
         var available = PortGrid.ActualWidth - fixedColumnsWidth - SystemParameters.VerticalScrollBarWidth - 8;
         if (available > 100)
             PathColumn.Width = new DataGridLength(available);
+    }
+
+    // Context menu handlers
+    private void PortGrid_LoadingRow(object? sender, DataGridRowEventArgs e)
+    {
+        var menu = new ContextMenu();
+        var copyPort = new System.Windows.Controls.MenuItem { Header = "Copy Port" };
+        copyPort.Click += CopyPort_Click;
+        menu.Items.Add(copyPort);
+
+        var copyPid = new System.Windows.Controls.MenuItem { Header = "Copy PID" };
+        copyPid.Click += CopyPid_Click;
+        menu.Items.Add(copyPid);
+
+        var copyName = new System.Windows.Controls.MenuItem { Header = "Copy Process Name" };
+        copyName.Click += CopyProcessName_Click;
+        menu.Items.Add(copyName);
+
+        menu.Items.Add(new Separator());
+
+        var openLocation = new System.Windows.Controls.MenuItem { Header = "Open File Location" };
+        openLocation.Click += OpenFileLocation_Click;
+        menu.Items.Add(openLocation);
+
+        menu.Items.Add(new Separator());
+
+        var killProcess = new System.Windows.Controls.MenuItem { Header = "Kill Process" };
+        killProcess.Click += ContextKillProcess_Click;
+        menu.Items.Add(killProcess);
+
+        e.Row.ContextMenu = menu;
+    }
+
+    private static PortEntryViewModel? GetContextMenuViewModel(object sender)
+    {
+        if (sender is not System.Windows.Controls.MenuItem menuItem)
+            return null;
+        if (menuItem.Parent is not ContextMenu contextMenu)
+            return null;
+        if (contextMenu.PlacementTarget is not DataGridRow row)
+            return null;
+        return row.DataContext as PortEntryViewModel;
+    }
+
+    private void CopyPort_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetContextMenuViewModel(sender) is { } vm)
+            Clipboard.SetText(vm.Port.ToString());
+    }
+
+    private void CopyPid_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetContextMenuViewModel(sender) is { } vm)
+            Clipboard.SetText(vm.Pid.ToString());
+    }
+
+    private void CopyProcessName_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetContextMenuViewModel(sender) is { } vm)
+            Clipboard.SetText(vm.ProcessName);
+    }
+
+    private void OpenFileLocation_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetContextMenuViewModel(sender) is not { } vm)
+            return;
+
+        if (string.IsNullOrEmpty(vm.ProcessPath))
+            return;
+
+        Process.Start("explorer.exe", $"/select,\"{vm.ProcessPath}\"");
+    }
+
+    private void ContextKillProcess_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetContextMenuViewModel(sender) is not { } vm)
+            return;
+
+        var result = System.Windows.MessageBox.Show(
+            $"Kill {vm.ProcessName}:{vm.Port} (PID {vm.Pid})?",
+            "DevKill",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning);
+
+        if (result != System.Windows.MessageBoxResult.Yes)
+            return;
+
+        if (!_processKiller.Kill(vm.Pid))
+            ShowKillFailureSnackbar($"Failed to kill {vm.ProcessName}:{vm.Port} (PID {vm.Pid})");
+
+        _ = _vm.RefreshAsync();
     }
 
     // Tray icon handlers
