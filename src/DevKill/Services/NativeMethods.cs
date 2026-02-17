@@ -5,6 +5,7 @@ namespace DevKill.Services;
 internal static partial class NativeMethods
 {
     public const int AF_INET = 2;
+    public const int AF_INET6 = 23;
 
     // TCP table types
     public const int TCP_TABLE_OWNER_PID_ALL = 5;
@@ -63,6 +64,28 @@ internal static partial class NativeMethods
     public struct MIB_UDPROW_OWNER_PID
     {
         public uint dwLocalAddr;
+        public int dwLocalPort;
+        public int dwOwningPid;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public unsafe struct MIB_TCP6ROW_OWNER_PID
+    {
+        public fixed byte ucLocalAddr[16];
+        public uint dwLocalScopeId;
+        public int dwLocalPort;
+        public fixed byte ucRemoteAddr[16];
+        public uint dwRemoteScopeId;
+        public int dwRemotePort;
+        public int dwState;
+        public int dwOwningPid;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public unsafe struct MIB_UDP6ROW_OWNER_PID
+    {
+        public fixed byte ucLocalAddr[16];
+        public uint dwLocalScopeId;
         public int dwLocalPort;
         public int dwOwningPid;
     }

@@ -20,7 +20,9 @@ public class PortScanner : IPortScanner
         var processCache = new Dictionary<int, (string Name, string Path)>();
 
         ScanTcp(entries, processCache);
+        ScanTcp6(entries, processCache);
         ScanUdp(entries, processCache);
+        ScanUdp6(entries, processCache);
 
         return entries;
     }
@@ -99,6 +101,107 @@ public class PortScanner : IPortScanner
 
                 int port = NetworkToHostPort(row.dwLocalPort);
                 var addr = new IPAddress(row.dwLocalAddr).ToString();
+                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+
+                entries.Add(new PortEntry
+                {
+                    Port = port,
+                    Pid = row.dwOwningPid,
+                    ProcessName = procName,
+                    ProcessPath = procPath,
+                    Protocol = "UDP",
+                    LocalAddress = addr,
+                    State = "",
+                    IsDevProcess = IsDevProcessName(procName),
+                });
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private unsafe void ScanTcp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    {
+        int size = 0;
+        NativeMethods.GetExtendedTcpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET6, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
+        if (size <= 0)
+            return;
+
+        IntPtr buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            int result = NativeMethods.GetExtendedTcpTable(buffer, ref size, false, NativeMethods.AF_INET6, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
+            if (result != 0)
+                return;
+
+            int rowCount = Marshal.ReadInt32(buffer);
+            IntPtr rowPtr = buffer + 4;
+            int rowSize = Marshal.SizeOf<NativeMethods.MIB_TCP6ROW_OWNER_PID>();
+
+            for (int i = 0; i < rowCount; i++)
+            {
+                var row = Marshal.PtrToStructure<NativeMethods.MIB_TCP6ROW_OWNER_PID>(rowPtr);
+                rowPtr += rowSize;
+
+                if (row.dwState != NativeMethods.MIB_TCP_STATE_LISTEN)
+                    continue;
+
+                int port = NetworkToHostPort(row.dwLocalPort);
+                var addrBytes = new byte[16];
+                for (int j = 0; j < 16; j++)
+                    addrBytes[j] = row.ucLocalAddr[j];
+                var addr = new IPAddress(addrBytes).ToString();
+                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+
+                entries.Add(new PortEntry
+                {
+                    Port = port,
+                    Pid = row.dwOwningPid,
+                    ProcessName = procName,
+                    ProcessPath = procPath,
+                    Protocol = "TCP",
+                    LocalAddress = addr,
+                    State = "LISTEN",
+                    IsDevProcess = IsDevProcessName(procName),
+                });
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private unsafe void ScanUdp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    {
+        int size = 0;
+        NativeMethods.GetExtendedUdpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET6, NativeMethods.UDP_TABLE_OWNER_PID, 0);
+        if (size <= 0)
+            return;
+
+        IntPtr buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            int result = NativeMethods.GetExtendedUdpTable(buffer, ref size, false, NativeMethods.AF_INET6, NativeMethods.UDP_TABLE_OWNER_PID, 0);
+            if (result != 0)
+                return;
+
+            int rowCount = Marshal.ReadInt32(buffer);
+            IntPtr rowPtr = buffer + 4;
+            int rowSize = Marshal.SizeOf<NativeMethods.MIB_UDP6ROW_OWNER_PID>();
+
+            for (int i = 0; i < rowCount; i++)
+            {
+                var row = Marshal.PtrToStructure<NativeMethods.MIB_UDP6ROW_OWNER_PID>(rowPtr);
+                rowPtr += rowSize;
+
+                int port = NetworkToHostPort(row.dwLocalPort);
+                var addrBytes = new byte[16];
+                for (int j = 0; j < 16; j++)
+                    addrBytes[j] = row.ucLocalAddr[j];
+                var addr = new IPAddress(addrBytes).ToString();
                 var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
 
                 entries.Add(new PortEntry

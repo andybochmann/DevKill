@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using DevKill.Services;
 using Xunit;
 
@@ -211,6 +212,34 @@ public class PortScannerTests
         {
             if (entry.IsDevProcess)
                 Assert.True(PortScanner.IsDevProcessName(entry.ProcessName));
+        }
+    }
+
+    // --- IPv6 struct size assertions ---
+
+    [Fact]
+    public void MIB_TCP6ROW_OWNER_PID_HasExpectedSize()
+    {
+        Assert.Equal(56, Marshal.SizeOf<NativeMethods.MIB_TCP6ROW_OWNER_PID>());
+    }
+
+    [Fact]
+    public void MIB_UDP6ROW_OWNER_PID_HasExpectedSize()
+    {
+        Assert.Equal(28, Marshal.SizeOf<NativeMethods.MIB_UDP6ROW_OWNER_PID>());
+    }
+
+    // --- IPv6 integration ---
+
+    [Fact]
+    public void Scan_AllAddressesAreValidIpAddresses()
+    {
+        var result = new PortScanner().Scan();
+        foreach (var entry in result)
+        {
+            Assert.True(
+                System.Net.IPAddress.TryParse(entry.LocalAddress, out _),
+                $"Invalid IP address: {entry.LocalAddress}");
         }
     }
 }
