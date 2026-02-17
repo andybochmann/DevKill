@@ -23,6 +23,8 @@ public partial class PortEntryViewModel : ObservableObject
     public int Pid => Entry.Pid;
     public string ProcessName => Entry.ProcessName;
     public string ProcessPath => Entry.ProcessPath;
+    public string WorkingDirectory => Entry.WorkingDirectory;
+    public string DisplayPath => !string.IsNullOrEmpty(Entry.WorkingDirectory) ? Entry.WorkingDirectory : Entry.ProcessPath;
     public string Protocol => Entry.Protocol;
     public string LocalAddress => Entry.LocalAddress;
     public string State => Entry.State;

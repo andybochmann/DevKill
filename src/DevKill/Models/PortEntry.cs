@@ -12,6 +12,7 @@ public sealed record PortEntry
     public required string Protocol { get; init; }
     public required string LocalAddress { get; init; }
     public required string State { get; init; }
+    public string WorkingDirectory { get; init; } = "";
     public bool IsDevProcess { get; init; }
     public string GroupName => IsDevProcess ? DevServersGroup : OtherPortsGroup;
 }

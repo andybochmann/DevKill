@@ -17,17 +17,20 @@ public class PortScanner : IPortScanner
     public List<PortEntry> Scan()
     {
         var entries = new List<PortEntry>();
-        var processCache = new Dictionary<int, (string Name, string Path)>();
+        var processCache = new Dictionary<int, (string Name, string Path, string WorkDir)>();
 
         ScanTcp(entries, processCache);
         ScanTcp6(entries, processCache);
         ScanUdp(entries, processCache);
         ScanUdp6(entries, processCache);
 
-        return entries;
+        // Deduplicate dual-stack entries (e.g. 0.0.0.0 + ::) — keep first (IPv4)
+        return entries
+            .DistinctBy(e => (e.Port, e.Pid, e.Protocol))
+            .ToList();
     }
 
-    private void ScanTcp(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    private void ScanTcp(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
         int size = 0;
         int sizeResult = NativeMethods.GetExtendedTcpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
@@ -55,7 +58,7 @@ public class PortScanner : IPortScanner
 
                 int port = NetworkToHostPort(row.dwLocalPort);
                 var addr = new IPAddress(row.dwLocalAddr).ToString();
-                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+                var (procName, procPath, procWorkDir) = GetProcessInfo(row.dwOwningPid, processCache);
 
                 entries.Add(new PortEntry
                 {
@@ -63,6 +66,7 @@ public class PortScanner : IPortScanner
                     Pid = row.dwOwningPid,
                     ProcessName = procName,
                     ProcessPath = procPath,
+                    WorkingDirectory = procWorkDir,
                     Protocol = "TCP",
                     LocalAddress = addr,
                     State = "LISTEN",
@@ -76,7 +80,7 @@ public class PortScanner : IPortScanner
         }
     }
 
-    private void ScanUdp(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    private void ScanUdp(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
         int size = 0;
         int sizeResult = NativeMethods.GetExtendedUdpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET, NativeMethods.UDP_TABLE_OWNER_PID, 0);
@@ -100,7 +104,7 @@ public class PortScanner : IPortScanner
                 rowPtr += rowSize;
 
                 int port = NetworkToHostPort(row.dwLocalPort);
-                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+                var (procName, procPath, procWorkDir) = GetProcessInfo(row.dwOwningPid, processCache);
 
                 if (!IsDevProcessName(procName))
                     continue;
@@ -113,6 +117,7 @@ public class PortScanner : IPortScanner
                     Pid = row.dwOwningPid,
                     ProcessName = procName,
                     ProcessPath = procPath,
+                    WorkingDirectory = procWorkDir,
                     Protocol = "UDP",
                     LocalAddress = addr,
                     State = "",
@@ -126,7 +131,7 @@ public class PortScanner : IPortScanner
         }
     }
 
-    private unsafe void ScanTcp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    private unsafe void ScanTcp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
         int size = 0;
         NativeMethods.GetExtendedTcpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET6, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
@@ -157,7 +162,7 @@ public class PortScanner : IPortScanner
                 for (int j = 0; j < 16; j++)
                     addrBytes[j] = row.ucLocalAddr[j];
                 var addr = new IPAddress(addrBytes).ToString();
-                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+                var (procName, procPath, procWorkDir) = GetProcessInfo(row.dwOwningPid, processCache);
 
                 entries.Add(new PortEntry
                 {
@@ -165,6 +170,7 @@ public class PortScanner : IPortScanner
                     Pid = row.dwOwningPid,
                     ProcessName = procName,
                     ProcessPath = procPath,
+                    WorkingDirectory = procWorkDir,
                     Protocol = "TCP",
                     LocalAddress = addr,
                     State = "LISTEN",
@@ -178,7 +184,7 @@ public class PortScanner : IPortScanner
         }
     }
 
-    private unsafe void ScanUdp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    private unsafe void ScanUdp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
         int size = 0;
         NativeMethods.GetExtendedUdpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET6, NativeMethods.UDP_TABLE_OWNER_PID, 0);
@@ -202,7 +208,7 @@ public class PortScanner : IPortScanner
                 rowPtr += rowSize;
 
                 int port = NetworkToHostPort(row.dwLocalPort);
-                var (procName, procPath) = GetProcessInfo(row.dwOwningPid, processCache);
+                var (procName, procPath, procWorkDir) = GetProcessInfo(row.dwOwningPid, processCache);
 
                 if (!IsDevProcessName(procName))
                     continue;
@@ -218,6 +224,7 @@ public class PortScanner : IPortScanner
                     Pid = row.dwOwningPid,
                     ProcessName = procName,
                     ProcessPath = procPath,
+                    WorkingDirectory = procWorkDir,
                     Protocol = "UDP",
                     LocalAddress = addr,
                     State = "",
@@ -251,13 +258,14 @@ public class PortScanner : IPortScanner
         return DevProcessNames.Contains(name);
     }
 
-    private static (string Name, string Path) GetProcessInfo(int pid, Dictionary<int, (string Name, string Path)> cache)
+    private static (string Name, string Path, string WorkDir) GetProcessInfo(int pid, Dictionary<int, (string Name, string Path, string WorkDir)> cache)
     {
         if (cache.TryGetValue(pid, out var cached))
             return cached;
 
         string name = "";
         string path = "";
+        string workDir = "";
 
         try
         {
@@ -271,14 +279,105 @@ public class PortScanner : IPortScanner
             {
                 // Access denied for some system processes
             }
+            workDir = GetProcessWorkingDirectory(pid);
         }
         catch
         {
             // Process may have exited
         }
 
-        var info = (name, path);
+        var info = (name, path, workDir);
         cache[pid] = info;
         return info;
+    }
+
+    /// <summary>
+    /// Reads the working directory of a process by querying its PEB via NtQueryInformationProcess.
+    /// Returns empty string if access is denied or the process has exited.
+    /// </summary>
+    private static string GetProcessWorkingDirectory(int pid)
+    {
+        IntPtr hProcess = NativeMethods.OpenProcess(
+            NativeMethods.PROCESS_QUERY_INFORMATION | NativeMethods.PROCESS_VM_READ,
+            false, pid);
+
+        if (hProcess == IntPtr.Zero)
+            return "";
+
+        try
+        {
+            var pbi = new NativeMethods.PROCESS_BASIC_INFORMATION();
+            int status = NativeMethods.NtQueryInformationProcess(
+                hProcess, 0, ref pbi,
+                Marshal.SizeOf<NativeMethods.PROCESS_BASIC_INFORMATION>(), out _);
+
+            if (status != 0 || pbi.PebBaseAddress == IntPtr.Zero)
+                return "";
+
+            // Read ProcessParameters pointer from PEB (offset 0x20 on x64)
+            IntPtr processParametersPtr = ReadPointer(hProcess, pbi.PebBaseAddress + 0x20);
+            if (processParametersPtr == IntPtr.Zero)
+                return "";
+
+            // Read CurrentDirectory.DosPath UNICODE_STRING at offset 0x38
+            // UNICODE_STRING layout on x64: ushort Length, ushort MaxLength, 4 bytes padding, IntPtr Buffer
+            IntPtr unicodeStringAddr = processParametersPtr + 0x38;
+            IntPtr buf = Marshal.AllocHGlobal(16);
+            try
+            {
+                if (!NativeMethods.ReadProcessMemory(hProcess, unicodeStringAddr, buf, 16, out _))
+                    return "";
+
+                ushort length = (ushort)Marshal.ReadInt16(buf, 0);
+                IntPtr strBuffer = Marshal.ReadIntPtr(buf, 8);
+
+                if (length == 0 || strBuffer == IntPtr.Zero)
+                    return "";
+
+                IntPtr strBuf = Marshal.AllocHGlobal(length);
+                try
+                {
+                    if (!NativeMethods.ReadProcessMemory(hProcess, strBuffer, strBuf, length, out _))
+                        return "";
+
+                    string dir = Marshal.PtrToStringUni(strBuf, length / 2) ?? "";
+                    // Remove trailing backslash for consistency (unless it's a root like C:\)
+                    if (dir.Length > 3 && dir.EndsWith('\\'))
+                        dir = dir[..^1];
+                    return dir;
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(strBuf);
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buf);
+            }
+        }
+        catch
+        {
+            return "";
+        }
+        finally
+        {
+            NativeMethods.CloseHandle(hProcess);
+        }
+    }
+
+    private static IntPtr ReadPointer(IntPtr hProcess, IntPtr address)
+    {
+        IntPtr buf = Marshal.AllocHGlobal(IntPtr.Size);
+        try
+        {
+            if (!NativeMethods.ReadProcessMemory(hProcess, address, buf, IntPtr.Size, out _))
+                return IntPtr.Zero;
+            return Marshal.ReadIntPtr(buf);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buf);
+        }
     }
 }

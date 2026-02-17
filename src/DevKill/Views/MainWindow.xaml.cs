@@ -108,6 +108,13 @@ public partial class MainWindow : FluentWindow
         KillSelected();
     }
 
+    private void Quit_Click(object sender, RoutedEventArgs e)
+    {
+        _isExiting = true;
+        TrayIcon.Dispose();
+        Application.Current.Shutdown();
+    }
+
     private void PortGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         // Manually stretch the Path column to fill remaining space
@@ -134,7 +141,15 @@ public partial class MainWindow : FluentWindow
         copyName.Click += CopyProcessName_Click;
         menu.Items.Add(copyName);
 
+        var copyDir = new System.Windows.Controls.MenuItem { Header = "Copy Directory" };
+        copyDir.Click += CopyDirectory_Click;
+        menu.Items.Add(copyDir);
+
         menu.Items.Add(new Separator());
+
+        var openDir = new System.Windows.Controls.MenuItem { Header = "Open Directory" };
+        openDir.Click += OpenDirectory_Click;
+        menu.Items.Add(openDir);
 
         var openLocation = new System.Windows.Controls.MenuItem { Header = "Open File Location" };
         openLocation.Click += OpenFileLocation_Click;
@@ -176,6 +191,24 @@ public partial class MainWindow : FluentWindow
     {
         if (GetContextMenuViewModel(sender) is { } vm)
             Clipboard.SetText(vm.ProcessName);
+    }
+
+    private void CopyDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetContextMenuViewModel(sender) is { } vm && !string.IsNullOrEmpty(vm.DisplayPath))
+            Clipboard.SetText(vm.DisplayPath);
+    }
+
+    private void OpenDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetContextMenuViewModel(sender) is not { } vm)
+            return;
+
+        var dir = !string.IsNullOrEmpty(vm.WorkingDirectory) ? vm.WorkingDirectory : "";
+        if (string.IsNullOrEmpty(dir))
+            return;
+
+        Process.Start("explorer.exe", $"\"{dir}\"");
     }
 
     private void OpenFileLocation_Click(object sender, RoutedEventArgs e)

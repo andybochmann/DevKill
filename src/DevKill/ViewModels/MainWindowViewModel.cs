@@ -81,7 +81,7 @@ public partial class MainWindowViewModel : ObservableObject
         return vm.Port.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase)
             || vm.ProcessName.Contains(filter, StringComparison.OrdinalIgnoreCase)
             || vm.Pid.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase)
-            || vm.ProcessPath.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || vm.DisplayPath.Contains(filter, StringComparison.OrdinalIgnoreCase)
             || vm.Protocol.Contains(filter, StringComparison.OrdinalIgnoreCase);
     }
 
