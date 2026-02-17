@@ -7,6 +7,8 @@ namespace DevKill.ViewModels;
 
 public partial class PortEntryViewModel : ObservableObject
 {
+    private readonly IProcessKiller _processKiller;
+
     public PortEntry Entry { get; }
 
     public int Port => Entry.Port;
@@ -19,15 +21,16 @@ public partial class PortEntryViewModel : ObservableObject
     public bool IsDevProcess => Entry.IsDevProcess;
     public string GroupName => Entry.GroupName;
 
-    public PortEntryViewModel(PortEntry entry)
+    public PortEntryViewModel(PortEntry entry, IProcessKiller processKiller)
     {
         Entry = entry;
+        _processKiller = processKiller;
     }
 
     [RelayCommand]
     private void Kill()
     {
-        ProcessKiller.Kill(Pid);
+        _processKiller.Kill(Pid);
         KillRequested?.Invoke(this, EventArgs.Empty);
     }
 

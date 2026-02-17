@@ -13,11 +13,14 @@ namespace DevKill.Views;
 public partial class MainWindow : FluentWindow
 {
     private readonly MainWindowViewModel _vm;
+    private readonly IProcessKiller _processKiller;
     private bool _isExiting;
 
     public MainWindow()
     {
-        _vm = new MainWindowViewModel();
+        var portScanner = new PortScanner();
+        _processKiller = new ProcessKiller();
+        _vm = new MainWindowViewModel(portScanner, _processKiller);
         DataContext = _vm;
         InitializeComponent();
         Loaded += MainWindow_Loaded;
@@ -79,7 +82,7 @@ public partial class MainWindow : FluentWindow
         if (result != System.Windows.MessageBoxResult.Yes) return;
 
         foreach (var vm in selected)
-            ProcessKiller.Kill(vm.Pid);
+            _processKiller.Kill(vm.Pid);
 
         _ = _vm.RefreshAsync();
     }
@@ -145,7 +148,7 @@ public partial class MainWindow : FluentWindow
                 var pid = entry.Pid;
                 item.Click += (_, _) =>
                 {
-                    ProcessKiller.Kill(pid);
+                    _processKiller.Kill(pid);
                     _ = _vm.RefreshAsync();
                 };
                 TrayContextMenu.Items.Add(item);

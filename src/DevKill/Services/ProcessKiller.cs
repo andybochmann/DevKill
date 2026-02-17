@@ -2,9 +2,9 @@ using System.Diagnostics;
 
 namespace DevKill.Services;
 
-public static class ProcessKiller
+public class ProcessKiller : IProcessKiller
 {
-    public static bool Kill(int pid)
+    public bool Kill(int pid)
     {
         try
         {

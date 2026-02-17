@@ -151,7 +151,7 @@ public class PortScannerTests
     [Fact]
     public void Scan_ReturnsNonNullList()
     {
-        var result = PortScanner.Scan();
+        var result = new PortScanner().Scan();
         Assert.NotNull(result);
     }
 
@@ -159,14 +159,14 @@ public class PortScannerTests
     public void Scan_ReturnsEntries_OnActiveSystem()
     {
         // On any Windows system, there should be at least some listening ports
-        var result = PortScanner.Scan();
+        var result = new PortScanner().Scan();
         Assert.NotEmpty(result);
     }
 
     [Fact]
     public void Scan_AllEntriesHaveValidPort()
     {
-        var result = PortScanner.Scan();
+        var result = new PortScanner().Scan();
         foreach (var entry in result)
         {
             Assert.InRange(entry.Port, 0, 65535);
@@ -176,7 +176,7 @@ public class PortScannerTests
     [Fact]
     public void Scan_AllEntriesHaveValidProtocol()
     {
-        var result = PortScanner.Scan();
+        var result = new PortScanner().Scan();
         foreach (var entry in result)
         {
             Assert.Contains(entry.Protocol, new[] { "TCP", "UDP" });
@@ -186,7 +186,7 @@ public class PortScannerTests
     [Fact]
     public void Scan_TcpEntries_HaveListenState()
     {
-        var result = PortScanner.Scan();
+        var result = new PortScanner().Scan();
         foreach (var entry in result.Where(e => e.Protocol == "TCP"))
         {
             Assert.Equal("LISTEN", entry.State);
@@ -196,7 +196,7 @@ public class PortScannerTests
     [Fact]
     public void Scan_UdpEntries_HaveEmptyState()
     {
-        var result = PortScanner.Scan();
+        var result = new PortScanner().Scan();
         foreach (var entry in result.Where(e => e.Protocol == "UDP"))
         {
             Assert.Equal("", entry.State);
@@ -206,7 +206,7 @@ public class PortScannerTests
     [Fact]
     public void Scan_DevProcessClassification_IsConsistent()
     {
-        var result = PortScanner.Scan();
+        var result = new PortScanner().Scan();
         foreach (var entry in result)
         {
             if (entry.IsDevProcess)

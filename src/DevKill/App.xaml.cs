@@ -75,7 +75,9 @@ public partial class App : Application
             using var writer = new StreamWriter(stdout) { AutoFlush = true };
             Console.SetOut(writer);
 
-            var entries = PortScanner.Scan();
+            var scanner = new PortScanner();
+            var killer = new ProcessKiller();
+            var entries = scanner.Scan();
 
             foreach (var port in ports)
             {
@@ -90,7 +92,7 @@ public partial class App : Application
                 foreach (var entry in matches)
                 {
                     Console.WriteLine($"Killing {entry.ProcessName} (PID {entry.Pid}) on port {port}...");
-                    bool success = ProcessKiller.Kill(entry.Pid);
+                    bool success = killer.Kill(entry.Pid);
                     Console.WriteLine(success
                         ? $"  Killed successfully."
                         : $"  Failed to kill process.");

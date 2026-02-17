@@ -5,7 +5,7 @@ using DevKill.Models;
 
 namespace DevKill.Services;
 
-public static class PortScanner
+public class PortScanner : IPortScanner
 {
     private static readonly HashSet<string> DevProcessNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -14,7 +14,7 @@ public static class PortScanner
         "nginx", "httpd", "apache", "hugo", "caddy", "vite",
     };
 
-    public static List<PortEntry> Scan()
+    public List<PortEntry> Scan()
     {
         var entries = new List<PortEntry>();
         var processCache = new Dictionary<int, (string Name, string Path)>();
@@ -25,7 +25,7 @@ public static class PortScanner
         return entries;
     }
 
-    private static void ScanTcp(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    private void ScanTcp(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
     {
         int size = 0;
         int sizeResult = NativeMethods.GetExtendedTcpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
@@ -74,7 +74,7 @@ public static class PortScanner
         }
     }
 
-    private static void ScanUdp(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
+    private void ScanUdp(List<PortEntry> entries, Dictionary<int, (string Name, string Path)> processCache)
     {
         int size = 0;
         int sizeResult = NativeMethods.GetExtendedUdpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET, NativeMethods.UDP_TABLE_OWNER_PID, 0);

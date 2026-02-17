@@ -11,6 +11,8 @@ namespace DevKill.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject
 {
+    private readonly IPortScanner _portScanner;
+    private readonly IProcessKiller _processKiller;
     private readonly DispatcherTimer _refreshTimer;
     private HashSet<(int Port, int Pid, string Protocol, string LocalAddress)> _lastSnapshot = [];
     private bool _isRefreshing;
@@ -34,8 +36,11 @@ public partial class MainWindowViewModel : ObservableObject
 
     public ICollectionView EntriesView { get; }
 
-    public MainWindowViewModel()
+    public MainWindowViewModel(IPortScanner portScanner, IProcessKiller processKiller)
     {
+        _portScanner = portScanner;
+        _processKiller = processKiller;
+
         EntriesView = CollectionViewSource.GetDefaultView(Entries);
         EntriesView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PortEntryViewModel.GroupName)));
         EntriesView.Filter = FilterEntries;
@@ -85,7 +90,7 @@ public partial class MainWindowViewModel : ObservableObject
         _isRefreshing = true;
         try
         {
-            var entries = await Task.Run(PortScanner.Scan);
+            var entries = await Task.Run(_portScanner.Scan);
 
             var newSnapshot = entries
                 .Select(e => (e.Port, e.Pid, e.Protocol, e.LocalAddress))
@@ -117,7 +122,7 @@ public partial class MainWindowViewModel : ObservableObject
                 var key = (entry.Port, entry.Pid, entry.Protocol, entry.LocalAddress);
                 if (!currentKeys.Contains(key))
                 {
-                    var vm = new PortEntryViewModel(entry);
+                    var vm = new PortEntryViewModel(entry, _processKiller);
                     vm.KillRequested += (_, _) => _ = RefreshAsync();
                     Entries.Add(vm);
                 }
@@ -141,7 +146,7 @@ public partial class MainWindowViewModel : ObservableObject
         var targets = selectedItems.OfType<PortEntryViewModel>().ToList();
         foreach (var vm in targets)
         {
-            ProcessKiller.Kill(vm.Pid);
+            _processKiller.Kill(vm.Pid);
         }
 
         _ = RefreshAsync();
