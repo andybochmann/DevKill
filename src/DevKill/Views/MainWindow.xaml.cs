@@ -24,6 +24,7 @@ public partial class MainWindow : FluentWindow
         DataContext = _vm;
         InitializeComponent();
         Loaded += MainWindow_Loaded;
+        _vm.KillFailureNotification += OnKillFailure;
     }
 
     public ICommand FocusSearchCommand => new RelayCommand(() => SearchBox.Focus());
@@ -81,8 +82,15 @@ public partial class MainWindow : FluentWindow
 
         if (result != System.Windows.MessageBoxResult.Yes) return;
 
+        var failures = new List<string>();
         foreach (var vm in selected)
-            _processKiller.Kill(vm.Pid);
+        {
+            if (!_processKiller.Kill(vm.Pid))
+                failures.Add($"{vm.ProcessName}:{vm.Port} (PID {vm.Pid})");
+        }
+
+        if (failures.Count > 0)
+            ShowKillFailureSnackbar($"Failed to kill: {string.Join(", ", failures)}");
 
         _ = _vm.RefreshAsync();
     }
@@ -146,9 +154,12 @@ public partial class MainWindow : FluentWindow
                     Header = $"Kill {entry.ProcessName}:{entry.Port} (PID {entry.Pid})",
                 };
                 var pid = entry.Pid;
+                var procName = entry.ProcessName;
+                var port = entry.Port;
                 item.Click += (_, _) =>
                 {
-                    _processKiller.Kill(pid);
+                    if (!_processKiller.Kill(pid))
+                        ShowKillFailureSnackbar($"Failed to kill {procName}:{port} (PID {pid})");
                     _ = _vm.RefreshAsync();
                 };
                 TrayContextMenu.Items.Add(item);
@@ -168,6 +179,23 @@ public partial class MainWindow : FluentWindow
         var exitItem = new System.Windows.Controls.MenuItem { Header = "Exit" };
         exitItem.Click += TrayExit_Click;
         TrayContextMenu.Items.Add(exitItem);
+    }
+
+    private void OnKillFailure(string message)
+    {
+        ShowKillFailureSnackbar(message);
+    }
+
+    private void ShowKillFailureSnackbar(string message)
+    {
+        var snackbar = new Snackbar(SnackbarPresenter)
+        {
+            Title = "Kill Failed",
+            Content = message,
+            Appearance = Wpf.Ui.Controls.ControlAppearance.Danger,
+            Timeout = TimeSpan.FromSeconds(5),
+        };
+        snackbar.Show();
     }
 
     private void ShowAndActivate()

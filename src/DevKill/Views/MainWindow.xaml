@@ -155,6 +155,9 @@
             </DataGrid.Columns>
         </DataGrid>
 
+        <!-- Snackbar -->
+        <ui:SnackbarPresenter x:Name="SnackbarPresenter" Grid.Row="2" VerticalAlignment="Bottom" />
+
         <!-- Status bar -->
         <Border Grid.Row="3" Padding="16,8">
             <Grid>

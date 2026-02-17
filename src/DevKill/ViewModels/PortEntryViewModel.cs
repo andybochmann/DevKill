@@ -5,6 +5,14 @@ using DevKill.Services;
 
 namespace DevKill.ViewModels;
 
+public class KillResultEventArgs(bool success, int pid, string processName, int port) : EventArgs
+{
+    public bool Success { get; } = success;
+    public int Pid { get; } = pid;
+    public string ProcessName { get; } = processName;
+    public int Port { get; } = port;
+}
+
 public partial class PortEntryViewModel : ObservableObject
 {
     private readonly IProcessKiller _processKiller;
@@ -30,9 +38,9 @@ public partial class PortEntryViewModel : ObservableObject
     [RelayCommand]
     private void Kill()
     {
-        _processKiller.Kill(Pid);
-        KillRequested?.Invoke(this, EventArgs.Empty);
+        bool success = _processKiller.Kill(Pid);
+        KillRequested?.Invoke(this, new KillResultEventArgs(success, Pid, ProcessName, Port));
     }
 
-    public event EventHandler? KillRequested;
+    public event EventHandler<KillResultEventArgs>? KillRequested;
 }

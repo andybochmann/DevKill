@@ -73,18 +73,41 @@ public class PortEntryViewModelTests
     }
 
     [Fact]
-    public void KillCommand_RaisesKillRequestedEvent()
+    public void KillCommand_RaisesKillRequestedEvent_WithSuccessResult()
     {
-        var entry = MakeEntry(pid: int.MaxValue);
-        var killer = new StubKiller();
+        var entry = MakeEntry(pid: int.MaxValue, port: 3000, processName: "node");
+        var killer = new StubKiller { KillResult = true };
         var vm = new PortEntryViewModel(entry, killer);
 
-        bool eventRaised = false;
-        vm.KillRequested += (_, _) => eventRaised = true;
+        KillResultEventArgs? receivedArgs = null;
+        vm.KillRequested += (_, args) => receivedArgs = args;
 
         vm.KillCommand.Execute(null);
 
-        Assert.True(eventRaised);
+        Assert.NotNull(receivedArgs);
+        Assert.True(receivedArgs.Success);
+        Assert.Equal(int.MaxValue, receivedArgs.Pid);
+        Assert.Equal("node", receivedArgs.ProcessName);
+        Assert.Equal(3000, receivedArgs.Port);
         Assert.Equal(int.MaxValue, killer.LastPid);
+    }
+
+    [Fact]
+    public void KillCommand_RaisesKillRequestedEvent_WithFailureResult()
+    {
+        var entry = MakeEntry(pid: 999, port: 8080, processName: "dotnet");
+        var killer = new StubKiller { KillResult = false };
+        var vm = new PortEntryViewModel(entry, killer);
+
+        KillResultEventArgs? receivedArgs = null;
+        vm.KillRequested += (_, args) => receivedArgs = args;
+
+        vm.KillCommand.Execute(null);
+
+        Assert.NotNull(receivedArgs);
+        Assert.False(receivedArgs.Success);
+        Assert.Equal(999, receivedArgs.Pid);
+        Assert.Equal("dotnet", receivedArgs.ProcessName);
+        Assert.Equal(8080, receivedArgs.Port);
     }
 }

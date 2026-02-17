@@ -36,6 +36,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     public ICollectionView EntriesView { get; }
 
+    public event Action<string>? KillFailureNotification;
+
     public MainWindowViewModel(IPortScanner portScanner, IProcessKiller processKiller)
     {
         _portScanner = portScanner;
@@ -123,7 +125,7 @@ public partial class MainWindowViewModel : ObservableObject
                 if (!currentKeys.Contains(key))
                 {
                     var vm = new PortEntryViewModel(entry, _processKiller);
-                    vm.KillRequested += (_, _) => _ = RefreshAsync();
+                    vm.KillRequested += OnEntryKillRequested;
                     Entries.Add(vm);
                 }
             }
@@ -143,11 +145,24 @@ public partial class MainWindowViewModel : ObservableObject
         if (selectedItems is null || selectedItems.Count == 0)
             return;
 
+        var failures = new List<string>();
         var targets = selectedItems.OfType<PortEntryViewModel>().ToList();
         foreach (var vm in targets)
         {
-            _processKiller.Kill(vm.Pid);
+            if (!_processKiller.Kill(vm.Pid))
+                failures.Add($"{vm.ProcessName}:{vm.Port} (PID {vm.Pid})");
         }
+
+        if (failures.Count > 0)
+            KillFailureNotification?.Invoke($"Failed to kill: {string.Join(", ", failures)}");
+
+        _ = RefreshAsync();
+    }
+
+    private void OnEntryKillRequested(object? sender, KillResultEventArgs args)
+    {
+        if (!args.Success)
+            KillFailureNotification?.Invoke($"Failed to kill {args.ProcessName}:{args.Port} (PID {args.Pid})");
 
         _ = RefreshAsync();
     }
