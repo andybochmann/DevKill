@@ -94,9 +94,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             var entries = await Task.Run(_portScanner.Scan);
 
-            var newSnapshot = entries
-                .Select(e => (e.Port, e.Pid, e.Protocol, e.LocalAddress))
-                .ToHashSet();
+            var newSnapshot = entries.Select(GetEntryKey).ToHashSet();
 
             if (newSnapshot.SetEquals(_lastSnapshot))
                 return;
@@ -105,24 +103,23 @@ public partial class MainWindowViewModel : ObservableObject
 
             // In-place diff to avoid flicker: remove stale, add new, keep existing
             var incomingKeys = newSnapshot;
-            var currentKeys = Entries
-                .Select(vm => (vm.Port, vm.Pid, vm.Protocol, vm.LocalAddress))
-                .ToHashSet();
+            var currentKeys = Entries.Select(vm => (vm.Port, vm.Pid, vm.Protocol, vm.LocalAddress)).ToHashSet();
 
             // Remove entries no longer present
             for (int i = Entries.Count - 1; i >= 0; i--)
             {
-                var vm = Entries[i];
-                var key = (vm.Port, vm.Pid, vm.Protocol, vm.LocalAddress);
+                var key = (Entries[i].Port, Entries[i].Pid, Entries[i].Protocol, Entries[i].LocalAddress);
                 if (!incomingKeys.Contains(key))
+                {
+                    Entries[i].KillRequested -= OnEntryKillRequested;
                     Entries.RemoveAt(i);
+                }
             }
 
             // Add entries that are new
             foreach (var entry in entries)
             {
-                var key = (entry.Port, entry.Pid, entry.Protocol, entry.LocalAddress);
-                if (!currentKeys.Contains(key))
+                if (!currentKeys.Contains(GetEntryKey(entry)))
                 {
                     var vm = new PortEntryViewModel(entry, _processKiller);
                     vm.KillRequested += OnEntryKillRequested;
@@ -139,25 +136,8 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void BulkKill(IList<object>? selectedItems)
-    {
-        if (selectedItems is null || selectedItems.Count == 0)
-            return;
-
-        var failures = new List<string>();
-        var targets = selectedItems.OfType<PortEntryViewModel>().ToList();
-        foreach (var vm in targets)
-        {
-            if (!_processKiller.Kill(vm.Pid))
-                failures.Add($"{vm.ProcessName}:{vm.Port} (PID {vm.Pid})");
-        }
-
-        if (failures.Count > 0)
-            KillFailureNotification?.Invoke($"Failed to kill: {string.Join(", ", failures)}");
-
-        _ = RefreshAsync();
-    }
+    private static (int Port, int Pid, string Protocol, string LocalAddress) GetEntryKey(PortEntry entry)
+        => (entry.Port, entry.Pid, entry.Protocol, entry.LocalAddress);
 
     private void OnEntryKillRequested(object? sender, KillResultEventArgs args)
     {

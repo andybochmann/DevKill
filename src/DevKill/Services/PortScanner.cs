@@ -24,25 +24,38 @@ public class PortScanner : IPortScanner
         ScanUdp(entries, processCache);
         ScanUdp6(entries, processCache);
 
-        // Deduplicate dual-stack entries (e.g. 0.0.0.0 + ::) — keep first (IPv4)
-        return entries
-            .DistinctBy(e => (e.Port, e.Pid, e.Protocol))
-            .ToList();
+        // Deduplicate dual-stack wildcard pairs (e.g. 0.0.0.0 + ::, 127.0.0.1 + ::1)
+        // Keep IPv4 when an IPv6 wildcard equivalent exists for the same port/pid/protocol
+        var seen = new HashSet<(int Port, int Pid, string Protocol)>();
+        var result = new List<PortEntry>();
+        foreach (var entry in entries)
+        {
+            var key = (entry.Port, entry.Pid, entry.Protocol);
+            if (IsWildcardAddress(entry.LocalAddress))
+            {
+                if (seen.Add(key))
+                    result.Add(entry);
+                // else: duplicate wildcard pair — skip the IPv6 equivalent
+            }
+            else
+            {
+                result.Add(entry);
+            }
+        }
+        return result;
     }
+
+    private const int ERROR_INSUFFICIENT_BUFFER = 122;
+    private const int MaxTableRetries = 3;
 
     private void ScanTcp(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
-        int size = 0;
-        int sizeResult = NativeMethods.GetExtendedTcpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
-        if (size <= 0)
+        IntPtr buffer = AllocTcpTable(NativeMethods.AF_INET);
+        if (buffer == IntPtr.Zero)
             return;
 
-        IntPtr buffer = Marshal.AllocHGlobal(size);
         try
         {
-            int result = NativeMethods.GetExtendedTcpTable(buffer, ref size, false, NativeMethods.AF_INET, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
-            if (result != 0)
-                return;
 
             int rowCount = Marshal.ReadInt32(buffer);
             IntPtr rowPtr = buffer + 4;
@@ -82,17 +95,12 @@ public class PortScanner : IPortScanner
 
     private void ScanUdp(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
-        int size = 0;
-        int sizeResult = NativeMethods.GetExtendedUdpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET, NativeMethods.UDP_TABLE_OWNER_PID, 0);
-        if (size <= 0)
+        IntPtr buffer = AllocUdpTable(NativeMethods.AF_INET);
+        if (buffer == IntPtr.Zero)
             return;
 
-        IntPtr buffer = Marshal.AllocHGlobal(size);
         try
         {
-            int result = NativeMethods.GetExtendedUdpTable(buffer, ref size, false, NativeMethods.AF_INET, NativeMethods.UDP_TABLE_OWNER_PID, 0);
-            if (result != 0)
-                return;
 
             int rowCount = Marshal.ReadInt32(buffer);
             IntPtr rowPtr = buffer + 4;
@@ -133,17 +141,12 @@ public class PortScanner : IPortScanner
 
     private unsafe void ScanTcp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
-        int size = 0;
-        NativeMethods.GetExtendedTcpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET6, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
-        if (size <= 0)
+        IntPtr buffer = AllocTcpTable(NativeMethods.AF_INET6);
+        if (buffer == IntPtr.Zero)
             return;
 
-        IntPtr buffer = Marshal.AllocHGlobal(size);
         try
         {
-            int result = NativeMethods.GetExtendedTcpTable(buffer, ref size, false, NativeMethods.AF_INET6, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
-            if (result != 0)
-                return;
 
             int rowCount = Marshal.ReadInt32(buffer);
             IntPtr rowPtr = buffer + 4;
@@ -158,10 +161,7 @@ public class PortScanner : IPortScanner
                     continue;
 
                 int port = NetworkToHostPort(row.dwLocalPort);
-                var addrBytes = new byte[16];
-                for (int j = 0; j < 16; j++)
-                    addrBytes[j] = row.ucLocalAddr[j];
-                var addr = new IPAddress(addrBytes).ToString();
+                var addr = GetIPv6Address(row.ucLocalAddr);
                 var (procName, procPath, procWorkDir) = GetProcessInfo(row.dwOwningPid, processCache);
 
                 entries.Add(new PortEntry
@@ -186,17 +186,12 @@ public class PortScanner : IPortScanner
 
     private unsafe void ScanUdp6(List<PortEntry> entries, Dictionary<int, (string Name, string Path, string WorkDir)> processCache)
     {
-        int size = 0;
-        NativeMethods.GetExtendedUdpTable(IntPtr.Zero, ref size, false, NativeMethods.AF_INET6, NativeMethods.UDP_TABLE_OWNER_PID, 0);
-        if (size <= 0)
+        IntPtr buffer = AllocUdpTable(NativeMethods.AF_INET6);
+        if (buffer == IntPtr.Zero)
             return;
 
-        IntPtr buffer = Marshal.AllocHGlobal(size);
         try
         {
-            int result = NativeMethods.GetExtendedUdpTable(buffer, ref size, false, NativeMethods.AF_INET6, NativeMethods.UDP_TABLE_OWNER_PID, 0);
-            if (result != 0)
-                return;
 
             int rowCount = Marshal.ReadInt32(buffer);
             IntPtr rowPtr = buffer + 4;
@@ -213,10 +208,7 @@ public class PortScanner : IPortScanner
                 if (!IsDevProcessName(procName))
                     continue;
 
-                var addrBytes = new byte[16];
-                for (int j = 0; j < 16; j++)
-                    addrBytes[j] = row.ucLocalAddr[j];
-                var addr = new IPAddress(addrBytes).ToString();
+                var addr = GetIPv6Address(row.ucLocalAddr);
 
                 entries.Add(new PortEntry
                 {
@@ -238,6 +230,59 @@ public class PortScanner : IPortScanner
         }
     }
 
+    /// <summary>
+    /// Allocates and fills a TCP table buffer with retry for TOCTOU race (table can grow between size query and fill).
+    /// Returns IntPtr.Zero on failure. Caller must free the buffer.
+    /// </summary>
+    private static IntPtr AllocTcpTable(int addressFamily)
+    {
+        for (int attempt = 0; attempt < MaxTableRetries; attempt++)
+        {
+            int size = 0;
+            NativeMethods.GetExtendedTcpTable(IntPtr.Zero, ref size, false, addressFamily, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
+            if (size <= 0)
+                return IntPtr.Zero;
+
+            IntPtr buffer = Marshal.AllocHGlobal(size);
+            int result = NativeMethods.GetExtendedTcpTable(buffer, ref size, false, addressFamily, NativeMethods.TCP_TABLE_OWNER_PID_ALL, 0);
+            if (result == 0)
+                return buffer;
+
+            Marshal.FreeHGlobal(buffer);
+            if (result != ERROR_INSUFFICIENT_BUFFER)
+                return IntPtr.Zero;
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Allocates and fills a UDP table buffer with retry for TOCTOU race.
+    /// Returns IntPtr.Zero on failure. Caller must free the buffer.
+    /// </summary>
+    private static IntPtr AllocUdpTable(int addressFamily)
+    {
+        for (int attempt = 0; attempt < MaxTableRetries; attempt++)
+        {
+            int size = 0;
+            NativeMethods.GetExtendedUdpTable(IntPtr.Zero, ref size, false, addressFamily, NativeMethods.UDP_TABLE_OWNER_PID, 0);
+            if (size <= 0)
+                return IntPtr.Zero;
+
+            IntPtr buffer = Marshal.AllocHGlobal(size);
+            int result = NativeMethods.GetExtendedUdpTable(buffer, ref size, false, addressFamily, NativeMethods.UDP_TABLE_OWNER_PID, 0);
+            if (result == 0)
+                return buffer;
+
+            Marshal.FreeHGlobal(buffer);
+            if (result != ERROR_INSUFFICIENT_BUFFER)
+                return IntPtr.Zero;
+        }
+        return IntPtr.Zero;
+    }
+
+    private static bool IsWildcardAddress(string address) =>
+        address is "0.0.0.0" or "::" or "127.0.0.1" or "::1";
+
     internal static int NetworkToHostPort(int networkPort)
     {
         // Port is stored in first 2 bytes in network byte order.
@@ -256,6 +301,14 @@ public class PortScanner : IPortScanner
             name = name[..^4];
 
         return DevProcessNames.Contains(name);
+    }
+
+    private static unsafe string GetIPv6Address(byte* ucLocalAddr)
+    {
+        var addrBytes = new byte[16];
+        for (int i = 0; i < 16; i++)
+            addrBytes[i] = ucLocalAddr[i];
+        return new IPAddress(addrBytes).ToString();
     }
 
     private static (string Name, string Path, string WorkDir) GetProcessInfo(int pid, Dictionary<int, (string Name, string Path, string WorkDir)> cache)
@@ -306,6 +359,10 @@ public class PortScanner : IPortScanner
 
         try
         {
+            // PEB offsets are only valid for x64 processes
+            if (IntPtr.Size != 8)
+                return "";
+
             var pbi = new NativeMethods.PROCESS_BASIC_INFORMATION();
             int status = NativeMethods.NtQueryInformationProcess(
                 hProcess, 0, ref pbi,
@@ -342,9 +399,7 @@ public class PortScanner : IPortScanner
 
                     string dir = Marshal.PtrToStringUni(strBuf, length / 2) ?? "";
                     // Remove trailing backslash for consistency (unless it's a root like C:\)
-                    if (dir.Length > 3 && dir.EndsWith('\\'))
-                        dir = dir[..^1];
-                    return dir;
+                    return dir.Length > 3 && dir.EndsWith('\\') ? dir[..^1] : dir;
                 }
                 finally
                 {

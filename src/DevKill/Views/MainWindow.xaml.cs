@@ -28,7 +28,8 @@ public partial class MainWindow : FluentWindow
         _vm.KillFailureNotification += OnKillFailure;
     }
 
-    public ICommand FocusSearchCommand => new RelayCommand(() => SearchBox.Focus());
+    private ICommand? _focusSearchCommand;
+    public ICommand FocusSearchCommand => _focusSearchCommand ??= new RelayCommand(() => SearchBox.Focus());
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
@@ -75,16 +76,27 @@ public partial class MainWindow : FluentWindow
         if (selected.Count == 0) return;
 
         var names = string.Join(", ", selected.Select(s => $"{s.ProcessName}:{s.Port}"));
+        if (!ConfirmKill($"Kill {selected.Count} process(es)?\n\n{names}"))
+            return;
+
+        ExecuteKill(selected);
+    }
+
+    private bool ConfirmKill(string message)
+    {
         var result = System.Windows.MessageBox.Show(
-            $"Kill {selected.Count} process(es)?\n\n{names}",
+            message,
             "DevKill",
             System.Windows.MessageBoxButton.YesNo,
             System.Windows.MessageBoxImage.Warning);
 
-        if (result != System.Windows.MessageBoxResult.Yes) return;
+        return result == System.Windows.MessageBoxResult.Yes;
+    }
 
+    private void ExecuteKill(IEnumerable<PortEntryViewModel> targets)
+    {
         var failures = new List<string>();
-        foreach (var vm in selected)
+        foreach (var vm in targets)
         {
             if (!_processKiller.Kill(vm.Pid))
                 failures.Add($"{vm.ProcessName}:{vm.Port} (PID {vm.Pid})");
@@ -201,25 +213,14 @@ public partial class MainWindow : FluentWindow
 
     private void OpenDirectory_Click(object sender, RoutedEventArgs e)
     {
-        if (GetContextMenuViewModel(sender) is not { } vm)
-            return;
-
-        var dir = !string.IsNullOrEmpty(vm.WorkingDirectory) ? vm.WorkingDirectory : "";
-        if (string.IsNullOrEmpty(dir))
-            return;
-
-        Process.Start("explorer.exe", $"\"{dir}\"");
+        if (GetContextMenuViewModel(sender) is { } vm && !string.IsNullOrEmpty(vm.WorkingDirectory))
+            Process.Start("explorer.exe", $"\"{vm.WorkingDirectory}\"");
     }
 
     private void OpenFileLocation_Click(object sender, RoutedEventArgs e)
     {
-        if (GetContextMenuViewModel(sender) is not { } vm)
-            return;
-
-        if (string.IsNullOrEmpty(vm.ProcessPath))
-            return;
-
-        Process.Start("explorer.exe", $"/select,\"{vm.ProcessPath}\"");
+        if (GetContextMenuViewModel(sender) is { } vm && !string.IsNullOrEmpty(vm.ProcessPath))
+            Process.Start("explorer.exe", $"/select,\"{vm.ProcessPath}\"");
     }
 
     private void ContextKillProcess_Click(object sender, RoutedEventArgs e)
@@ -227,19 +228,10 @@ public partial class MainWindow : FluentWindow
         if (GetContextMenuViewModel(sender) is not { } vm)
             return;
 
-        var result = System.Windows.MessageBox.Show(
-            $"Kill {vm.ProcessName}:{vm.Port} (PID {vm.Pid})?",
-            "DevKill",
-            System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Warning);
-
-        if (result != System.Windows.MessageBoxResult.Yes)
+        if (!ConfirmKill($"Kill {vm.ProcessName}:{vm.Port} (PID {vm.Pid})?"))
             return;
 
-        if (!_processKiller.Kill(vm.Pid))
-            ShowKillFailureSnackbar($"Failed to kill {vm.ProcessName}:{vm.Port} (PID {vm.Pid})");
-
-        _ = _vm.RefreshAsync();
+        ExecuteKill([vm]);
     }
 
     // Tray icon handlers

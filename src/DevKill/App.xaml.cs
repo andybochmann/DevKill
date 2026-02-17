@@ -56,7 +56,6 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _mutex?.ReleaseMutex();
         _mutex?.Dispose();
         base.OnExit(e);
     }
