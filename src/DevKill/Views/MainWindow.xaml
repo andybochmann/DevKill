@@ -141,13 +141,15 @@
 
                 <DataGridTextColumn Header="PID" Binding="{Binding Pid}" Width="80" />
                 <DataGridTextColumn Header="Process" Binding="{Binding ProcessName}" Width="150" />
-                <DataGridTextColumn x:Name="PathColumn" Header="Directory" Binding="{Binding DisplayPath}" Width="200">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                <DataGridTemplateColumn x:Name="PathColumn" Header="Directory" Width="200">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayPath}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding ProcessPath}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
 
                 <DataGridTemplateColumn Header="" Width="70">
                     <DataGridTemplateColumn.CellTemplate>
