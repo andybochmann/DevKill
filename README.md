@@ -17,7 +17,7 @@ Developers accumulate zombie dev servers — Node, .NET, Python, PHP, Vite, and 
 
 ## Screenshots
 
-*Coming soon*
+![DevKill main window](docs/screenshot.png)
 
 ## Requirements
 
@@ -53,11 +53,11 @@ devkill --minimized
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Framework | WPF on .NET 10 |
-| UI Theme | [WPF-UI](https://github.com/lepoco/wpfui) (Fluent/WinUI dark theme) |
-| MVVM | [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) |
+| Component     | Technology                                                                 |
+| ------------- | -------------------------------------------------------------------------- |
+| Framework     | WPF on .NET 10                                                             |
+| UI Theme      | [WPF-UI](https://github.com/lepoco/wpfui) (Fluent/WinUI dark theme)        |
+| MVVM          | [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet)        |
 | Port Scanning | P/Invoke to `iphlpapi.dll` (`GetExtendedTcpTable` / `GetExtendedUdpTable`) |
 
 ## Project Structure
@@ -84,13 +84,13 @@ Processes are classified as dev servers by matching their process name against a
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Delete` | Kill selected process(es) |
-| `Ctrl+K` / `Ctrl+F` | Focus search box |
-| `Ctrl+A` | Select all |
-| `F5` | Refresh |
-| `Escape` | Minimize to tray |
+| Shortcut            | Action                    |
+| ------------------- | ------------------------- |
+| `Delete`            | Kill selected process(es) |
+| `Ctrl+K` / `Ctrl+F` | Focus search box          |
+| `Ctrl+A`            | Select all                |
+| `F5`                | Refresh                   |
+| `Escape`            | Minimize to tray          |
 
 ## Running Tests
 
