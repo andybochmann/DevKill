@@ -30,7 +30,7 @@ Developers accumulate zombie dev servers — Node, .NET, Python, PHP, Vite, and 
 ### Build from source
 
 ```
-git clone https://github.com/youruser/DevKill.git
+git clone https://github.com/andybochmann/DevKill.git
 cd DevKill
 dotnet build src/DevKill
 ```
