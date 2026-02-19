@@ -27,6 +27,12 @@ Developers accumulate zombie dev servers — Node, .NET, Python, PHP, Vite, and 
 
 ## Installation
 
+### winget
+
+```
+winget install AndyBochmann.DevKill
+```
+
 ### Build from source
 
 ```
